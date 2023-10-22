@@ -15,6 +15,8 @@ import {
   string,
 } from 'valibot'
 
+import { useDialog } from '@/components/dialog/DialogStore'
+import { useAuth } from '@/components/FirebaseAuth'
 // @ts-ignore
 import { ShareButton } from '@/components/ShareButton'
 import { Button } from '@/components/ui/button'
@@ -30,9 +32,10 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { BASEURL, patchHit } from '@/lib/api'
-import { trackEvent } from '@/lib/firebase'
+import { getFirebaseAuth, trackEvent } from '@/lib/firebase'
 import { UserProfile } from '@/lib/types'
 import useSendQuestion from '@/modules/PublicQuestionPage/hooks/useSendQuestion'
+import { useOwner } from '@/queries/useQueries'
 
 const schema = object({
   q: string('Pertanyaan perlu disi terlebih dahulu.', [
@@ -42,11 +45,15 @@ const schema = object({
   ]),
 })
 
+const auth = getFirebaseAuth()
 type FormValues = Output<typeof schema>
 
 export function QuestionForm({ owner }: { owner: UserProfile }) {
   const { toast } = useToast()
   const { mutate, isLoading } = useSendQuestion()
+  const { user } = useAuth(auth)
+  const { data: dataOwner } = useOwner(user!)
+  const dialog = useDialog()
 
   const form = useForm<FormValues>({
     resolver: valibotResolver(schema),
@@ -56,6 +63,18 @@ export function QuestionForm({ owner }: { owner: UserProfile }) {
   })
 
   async function sendQuestion(slug: string, q: string, token: string) {
+    if (dataOwner?.data.slug === owner.slug) {
+      dialog({
+        title: 'Mohon maaf 🙏',
+        description:
+          'Sebagai pemilik halaman ini, anda tidak bisa mengajukan pertanyaan ke diri anda sendiri',
+        submitButton: {
+          label: 'Ya, Saya Mengerti',
+          variant: 'default',
+        },
+      })
+      return
+    }
     return mutate(
       { slug, q, token },
       {
